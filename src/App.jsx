@@ -32,6 +32,15 @@ const SEARCH_FILTERS = [
   { value: 'year', label: 'This year' },
 ]
 
+const SORT_OPTIONS = [
+  { value: 'spent_at_desc', label: 'Newest first' },
+  { value: 'spent_at_asc', label: 'Oldest first' },
+  { value: 'amount_desc', label: 'Amount: high to low' },
+  { value: 'amount_asc', label: 'Amount: low to high' },
+  { value: 'return_desc', label: 'Return: high to low' },
+  { value: 'return_asc', label: 'Return: low to high' },
+]
+
 const DEMO_EXPENSES = [
   {
     id: 'demo-1',
@@ -67,6 +76,8 @@ function App() {
   const [form, setForm] = useState(INITIAL_FORM)
   const [searchText, setSearchText] = useState('')
   const [periodFilter, setPeriodFilter] = useState('all')
+  const [sortBy, setSortBy] = useState('spent_at_desc')
+  const [showPendingReturns, setShowPendingReturns] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editDraft, setEditDraft] = useState(INITIAL_FORM)
   const [loading, setLoading] = useState(true)
@@ -106,14 +117,20 @@ function App() {
   }, [])
 
   const filteredExpenses = useMemo(() => {
-    return expenses.filter((expense) => {
+    const filtered = expenses.filter((expense) => {
       const matchesSearch = expense.title
         .toLowerCase()
         .includes(searchText.trim().toLowerCase())
 
-      return matchesSearch && matchesPeriod(expense.spent_at, periodFilter)
+      const matchesReturn =
+        !showPendingReturns ||
+        (Number(expense.return_amount || 0) > 0 && !expense.return_received)
+
+      return matchesSearch && matchesPeriod(expense.spent_at, periodFilter) && matchesReturn
     })
-  }, [expenses, periodFilter, searchText])
+
+    return sortExpenses(filtered, sortBy)
+  }, [expenses, periodFilter, searchText, showPendingReturns, sortBy])
 
   const totals = useMemo(() => {
     return {
@@ -390,6 +407,27 @@ function App() {
                   </option>
                 ))}
               </select>
+
+              <select
+                className="period-select"
+                onChange={(event) => setSortBy(event.target.value)}
+                value={sortBy}
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
+              <label className="checkbox-line inline">
+                <input
+                  checked={showPendingReturns}
+                  onChange={(event) => setShowPendingReturns(event.target.checked)}
+                  type="checkbox"
+                />
+                Pending returns
+              </label>
             </div>
           </div>
 
@@ -579,6 +617,36 @@ function parseOptionalNumber(value) {
 
   const parsed = Number(value)
   return Number.isNaN(parsed) ? null : parsed
+}
+
+function sortExpenses(list, sortBy) {
+  const sorted = [...list]
+
+  const getReturn = (expense) => Number(expense.return_amount || 0)
+
+  switch (sortBy) {
+    case 'spent_at_asc':
+      sorted.sort((a, b) => new Date(a.spent_at) - new Date(b.spent_at))
+      break
+    case 'amount_desc':
+      sorted.sort((a, b) => Number(b.amount) - Number(a.amount))
+      break
+    case 'amount_asc':
+      sorted.sort((a, b) => Number(a.amount) - Number(b.amount))
+      break
+    case 'return_desc':
+      sorted.sort((a, b) => getReturn(b) - getReturn(a))
+      break
+    case 'return_asc':
+      sorted.sort((a, b) => getReturn(a) - getReturn(b))
+      break
+    case 'spent_at_desc':
+    default:
+      sorted.sort((a, b) => new Date(b.spent_at) - new Date(a.spent_at))
+      break
+  }
+
+  return sorted
 }
 
 function formatMoney(value) {

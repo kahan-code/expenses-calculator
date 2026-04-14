@@ -215,6 +215,12 @@ table input {
   margin-top: 0;
 }
 
+.checkbox-line.inline {
+  margin-top: 0;
+  padding-inline: 6px;
+  white-space: nowrap;
+}
+
 .entry-card input:focus,
 .search-input:focus,
 .period-select:focus,
