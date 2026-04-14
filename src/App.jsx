@@ -18,6 +18,9 @@ import { isSupabaseConfigured, supabase } from './lib/supabase'
 const INITIAL_FORM = {
   amount: '',
   title: '',
+  returnAmount: '',
+  returnPerson: '',
+  returnReceived: false,
   spentAt: new Date().toISOString().slice(0, 10),
 }
 
@@ -34,18 +37,27 @@ const DEMO_EXPENSES = [
     id: 'demo-1',
     amount: 560,
     title: 'Groceries',
+    return_amount: 0,
+    return_person: '',
+    return_received: false,
     spent_at: new Date().toISOString(),
   },
   {
     id: 'demo-2',
     amount: 120,
     title: 'Taxi',
+    return_amount: 50,
+    return_person: 'Alex',
+    return_received: false,
     spent_at: new Date(Date.now() - 86400000).toISOString(),
   },
   {
     id: 'demo-3',
     amount: 1499,
     title: 'Internet bill',
+    return_amount: 0,
+    return_person: '',
+    return_received: false,
     spent_at: new Date(Date.now() - 7 * 86400000).toISOString(),
   },
 ]
@@ -120,6 +132,9 @@ function App() {
     const nextExpense = {
       amount: Number(form.amount),
       title: form.title.trim(),
+      return_amount: parseOptionalNumber(form.returnAmount),
+      return_person: form.returnPerson.trim() || null,
+      return_received: Boolean(form.returnReceived),
       spent_at: new Date(form.spentAt).toISOString(),
     }
 
@@ -160,6 +175,12 @@ function App() {
     setEditDraft({
       amount: String(expense.amount),
       title: expense.title,
+      returnAmount:
+        expense.return_amount === null || expense.return_amount === undefined
+          ? ''
+          : String(expense.return_amount),
+      returnPerson: expense.return_person ?? '',
+      returnReceived: Boolean(expense.return_received),
       spentAt: expense.spent_at.slice(0, 10),
     })
   }
@@ -171,6 +192,9 @@ function App() {
     const updates = {
       amount: Number(editDraft.amount),
       title: editDraft.title.trim(),
+      return_amount: parseOptionalNumber(editDraft.returnAmount),
+      return_person: editDraft.returnPerson.trim() || null,
+      return_received: Boolean(editDraft.returnReceived),
       spent_at: new Date(editDraft.spentAt).toISOString(),
     }
 
@@ -205,6 +229,27 @@ function App() {
         current.map((expense) => (expense.id === expenseId ? data : expense)),
       )
       setEditingId(null)
+    }
+
+    setSaving(false)
+  }
+
+  async function deleteExpense(expenseId) {
+    setSaving(true)
+    setErrorMessage('')
+
+    if (!isSupabaseConfigured || !supabase) {
+      setExpenses((current) => current.filter((expense) => expense.id !== expenseId))
+      setSaving(false)
+      return
+    }
+
+    const { error } = await supabase.from('expenses').delete().eq('id', expenseId)
+
+    if (error) {
+      setErrorMessage(error.message)
+    } else {
+      setExpenses((current) => current.filter((expense) => expense.id !== expenseId))
     }
 
     setSaving(false)
@@ -270,6 +315,40 @@ function App() {
           </label>
 
           <label>
+            Return amount
+            <input
+              min="0"
+              name="returnAmount"
+              onChange={handleFormChange(setForm)}
+              placeholder="0"
+              step="0.01"
+              type="number"
+              value={form.returnAmount}
+            />
+          </label>
+
+          <label>
+            Return by
+            <input
+              name="returnPerson"
+              onChange={handleFormChange(setForm)}
+              placeholder="Name of person"
+              type="text"
+              value={form.returnPerson}
+            />
+          </label>
+
+          <label className="checkbox-line">
+            <input
+              checked={form.returnReceived}
+              name="returnReceived"
+              onChange={handleCheckboxChange(setForm)}
+              type="checkbox"
+            />
+            Mark return as received
+          </label>
+
+          <label>
             Date
             <input
               name="spentAt"
@@ -323,6 +402,7 @@ function App() {
                 <tr>
                   <th>Spent on</th>
                   <th>Amount</th>
+                  <th>Return</th>
                   <th>Date</th>
                   <th>Action</th>
                 </tr>
@@ -330,7 +410,7 @@ function App() {
               <tbody>
                 {!loading && filteredExpenses.length === 0 ? (
                   <tr>
-                    <td className="empty-state" colSpan="4">
+                    <td className="empty-state" colSpan="5">
                       No expenses match your current search and filter.
                     </td>
                   </tr>
@@ -365,6 +445,47 @@ function App() {
                           />
                         ) : (
                           formatMoney(expense.amount)
+                        )}
+                      </td>
+                      <td>
+                        {isEditing ? (
+                          <div className="return-edit">
+                            <input
+                              min="0"
+                              name="returnAmount"
+                              onChange={handleFormChange(setEditDraft)}
+                              placeholder="0"
+                              step="0.01"
+                              type="number"
+                              value={editDraft.returnAmount}
+                            />
+                            <input
+                              name="returnPerson"
+                              onChange={handleFormChange(setEditDraft)}
+                              placeholder="Name"
+                              type="text"
+                              value={editDraft.returnPerson}
+                            />
+                            <label className="checkbox-line">
+                              <input
+                                checked={editDraft.returnReceived}
+                                name="returnReceived"
+                                onChange={handleCheckboxChange(setEditDraft)}
+                                type="checkbox"
+                              />
+                              Received
+                            </label>
+                          </div>
+                        ) : expense.return_amount ? (
+                          <>
+                            <div>{formatMoney(expense.return_amount)}</div>
+                            <div className="muted">
+                              {expense.return_person || 'No name'}
+                              {expense.return_received ? ' · Received' : ''}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="muted">-</span>
                         )}
                       </td>
                       <td>
@@ -406,6 +527,15 @@ function App() {
                             Edit
                           </button>
                         )}
+                        {!isEditing ? (
+                          <button
+                            className="table-button ghost"
+                            onClick={() => deleteExpense(expense.id)}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        ) : null}
                       </td>
                     </tr>
                   )
@@ -433,6 +563,22 @@ function handleFormChange(setter) {
     const { name, value } = event.target
     setter((current) => ({ ...current, [name]: value }))
   }
+}
+
+function handleCheckboxChange(setter) {
+  return (event) => {
+    const { name, checked } = event.target
+    setter((current) => ({ ...current, [name]: checked }))
+  }
+}
+
+function parseOptionalNumber(value) {
+  if (value === '' || value === null || value === undefined) {
+    return null
+  }
+
+  const parsed = Number(value)
+  return Number.isNaN(parsed) ? null : parsed
 }
 
 function formatMoney(value) {

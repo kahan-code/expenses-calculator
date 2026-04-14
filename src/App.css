@@ -201,6 +201,20 @@ table input {
   color: #0f172a;
 }
 
+.checkbox-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  color: #334155;
+  font-size: 0.94rem;
+}
+
+.checkbox-line input {
+  width: auto;
+  margin-top: 0;
+}
+
 .entry-card input:focus,
 .search-input:focus,
 .period-select:focus,
@@ -273,6 +287,16 @@ th {
 
 td {
   color: #0f172a;
+}
+
+.muted {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.return-edit {
+  display: grid;
+  gap: 8px;
 }
 
 .row-actions {
