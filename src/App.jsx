@@ -657,6 +657,13 @@ function formatMoney(value) {
   }).format(Number(value || 0))
 }
 
+function getNetExpenseAmount(expense) {
+  const amount = Number(expense.amount || 0)
+  const receivedReturn = expense.return_received ? Number(expense.return_amount || 0) : 0
+
+  return amount - receivedReturn
+}
+
 function matchesPeriod(dateValue, period) {
   if (period === 'all') {
     return true
@@ -678,7 +685,7 @@ function matchesPeriod(dateValue, period) {
 function sumByPeriod(expenses, period) {
   return expenses
     .filter((expense) => matchesPeriod(expense.spent_at, period))
-    .reduce((total, expense) => total + Number(expense.amount), 0)
+    .reduce((total, expense) => total + getNetExpenseAmount(expense), 0)
 }
 
 export default App
