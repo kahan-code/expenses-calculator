@@ -71,6 +71,11 @@ const DEMO_EXPENSES = [
   },
 ]
 
+const INITIAL_AUTH_FORM = {
+  email: '',
+  password: '',
+}
+
 function App() {
   const [expenses, setExpenses] = useState([])
   const [form, setForm] = useState(INITIAL_FORM)
@@ -84,6 +89,50 @@ function App() {
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [infoMessage, setInfoMessage] = useState('')
+  const [authForm, setAuthForm] = useState(INITIAL_AUTH_FORM)
+  const [authMode, setAuthMode] = useState('signin')
+  const [authLoading, setAuthLoading] = useState(isSupabaseConfigured)
+  const [authSubmitting, setAuthSubmitting] = useState(false)
+  const [authError, setAuthError] = useState('')
+  const [session, setSession] = useState(null)
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) {
+      setAuthLoading(false)
+      return
+    }
+
+    let mounted = true
+
+    async function loadSession() {
+      const { data, error } = await supabase.auth.getSession()
+
+      if (!mounted) {
+        return
+      }
+
+      if (error) {
+        setAuthError(error.message)
+      }
+
+      setSession(data.session ?? null)
+      setAuthLoading(false)
+    }
+
+    loadSession()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession)
+      setAuthError('')
+    })
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
 
   useEffect(() => {
     async function loadExpenses() {
@@ -97,9 +146,17 @@ function App() {
         return
       }
 
+      if (!session?.user?.id) {
+        setExpenses([])
+        setInfoMessage('Sign in to securely manage your own expenses.')
+        setLoading(false)
+        return
+      }
+
       const { data, error } = await supabase
         .from('expenses')
         .select('*')
+        .eq('user_id', session.user.id)
         .order('spent_at', { ascending: false })
 
       if (error) {
@@ -114,7 +171,7 @@ function App() {
     }
 
     loadExpenses()
-  }, [])
+  }, [session])
 
   const filteredExpenses = useMemo(() => {
     const filtered = expenses.filter((expense) => {
@@ -171,9 +228,15 @@ function App() {
       return
     }
 
+    if (!session?.user?.id) {
+      setErrorMessage('Please sign in before adding expenses.')
+      setSaving(false)
+      return
+    }
+
     const { data, error } = await supabase
       .from('expenses')
-      .insert(nextExpense)
+      .insert({ ...nextExpense, user_id: session.user.id })
       .select()
       .single()
 
@@ -232,10 +295,17 @@ function App() {
       return
     }
 
+    if (!session?.user?.id) {
+      setErrorMessage('Please sign in before updating expenses.')
+      setSaving(false)
+      return
+    }
+
     const { data, error } = await supabase
       .from('expenses')
       .update(updates)
       .eq('id', expenseId)
+      .eq('user_id', session.user.id)
       .select()
       .single()
 
@@ -261,7 +331,17 @@ function App() {
       return
     }
 
-    const { error } = await supabase.from('expenses').delete().eq('id', expenseId)
+    if (!session?.user?.id) {
+      setErrorMessage('Please sign in before deleting expenses.')
+      setSaving(false)
+      return
+    }
+
+    const { error } = await supabase
+      .from('expenses')
+      .delete()
+      .eq('id', expenseId)
+      .eq('user_id', session.user.id)
 
     if (error) {
       setErrorMessage(error.message)
@@ -270,6 +350,145 @@ function App() {
     }
 
     setSaving(false)
+  }
+
+  async function handleAuthSubmit(event) {
+    event.preventDefault()
+
+    if (!supabase) {
+      return
+    }
+
+    setAuthSubmitting(true)
+    setAuthError('')
+    setInfoMessage('')
+
+    const email = authForm.email.trim().toLowerCase()
+    const password = authForm.password
+
+    if (!email || !password) {
+      setAuthError('Email and password are both required.')
+      setAuthSubmitting(false)
+      return
+    }
+
+    let response
+
+    if (authMode === 'signup') {
+      response = await supabase.auth.signUp({ email, password })
+    } else {
+      response = await supabase.auth.signInWithPassword({ email, password })
+    }
+
+    const { data, error } = response
+
+    if (error) {
+      setAuthError(error.message)
+    } else {
+      setAuthForm(INITIAL_AUTH_FORM)
+
+      if (authMode === 'signup' && !data.session) {
+        setInfoMessage(
+          'Account created. If email confirmation is enabled in Supabase, verify your email to continue.',
+        )
+      } else {
+        setInfoMessage('Signed in successfully.')
+      }
+    }
+
+    setAuthSubmitting(false)
+  }
+
+  async function handleSignOut() {
+    if (!supabase) {
+      return
+    }
+
+    setSaving(true)
+    setErrorMessage('')
+
+    const { error } = await supabase.auth.signOut()
+
+    if (error) {
+      setErrorMessage(error.message)
+    } else {
+      setExpenses([])
+      setEditingId(null)
+      setInfoMessage('Signed out successfully.')
+    }
+
+    setSaving(false)
+  }
+
+  if (isSupabaseConfigured && authLoading) {
+    return (
+      <main className="auth-shell">
+        <section className="auth-card">
+          <p className="section-tag">Authentication</p>
+          <h1>Checking your session...</h1>
+        </section>
+      </main>
+    )
+  }
+
+  if (isSupabaseConfigured && !session) {
+    const modeLabel = authMode === 'signup' ? 'Create account' : 'Sign in'
+
+    return (
+      <main className="auth-shell">
+        <form className="auth-card" onSubmit={handleAuthSubmit}>
+          <p className="section-tag">Secure access</p>
+          <h1>{modeLabel}</h1>
+          <p className="hero-copy">
+            This uses email and password authentication, so you are not blocked by low
+            one-time email link limits.
+          </p>
+
+          <label>
+            Email
+            <input
+              autoComplete="email"
+              name="email"
+              onChange={handleFormChange(setAuthForm)}
+              placeholder="you@example.com"
+              type="email"
+              value={authForm.email}
+            />
+          </label>
+
+          <label>
+            Password
+            <input
+              autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
+              minLength="6"
+              name="password"
+              onChange={handleFormChange(setAuthForm)}
+              placeholder="At least 6 characters"
+              type="password"
+              value={authForm.password}
+            />
+          </label>
+
+          {authError ? <p className="message error">{authError}</p> : null}
+          {infoMessage ? <p className="message info">{infoMessage}</p> : null}
+
+          <button className="primary-button" disabled={authSubmitting} type="submit">
+            {authSubmitting ? 'Please wait...' : modeLabel}
+          </button>
+
+          <button
+            className="secondary-button"
+            onClick={() => {
+              setAuthMode((current) => (current === 'signup' ? 'signin' : 'signup'))
+              setAuthError('')
+            }}
+            type="button"
+          >
+            {authMode === 'signup' ? 'I already have an account' : 'Create a new account'}
+          </button>
+        </form>
+      </main>
+    )
   }
 
   return (
@@ -286,8 +505,17 @@ function App() {
         <div className="hero-actions">
           <div className="status-card">
             <span className="status-label">Storage</span>
-            <strong>{isSupabaseConfigured ? 'Supabase connected' : 'Demo mode'}</strong>
+            <strong>
+              {isSupabaseConfigured
+                ? `Signed in as ${session?.user?.email || 'authenticated user'}`
+                : 'Demo mode'}
+            </strong>
           </div>
+          {isSupabaseConfigured ? (
+            <button className="secondary-button" disabled={saving} onClick={handleSignOut} type="button">
+              Sign out
+            </button>
+          ) : null}
         </div>
       </section>
 

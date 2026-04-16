@@ -4,6 +4,58 @@
   padding: 40px 0 56px;
 }
 
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: min(460px, 100%);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(201, 212, 227, 0.9);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.1);
+  border-radius: 24px;
+  padding: 24px;
+}
+
+.auth-card h1 {
+  margin: 8px 0 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  line-height: 1.05;
+  color: #0f172a;
+  font-size: clamp(2rem, 5vw, 2.8rem);
+}
+
+.auth-card label {
+  display: block;
+  margin-top: 16px;
+  color: #334155;
+  font-size: 0.96rem;
+}
+
+.auth-card input {
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #cbd5e1;
+  background: rgba(255, 255, 255, 0.92);
+  color: #0f172a;
+}
+
+.auth-card input:focus {
+  outline: 2px solid rgba(14, 165, 233, 0.22);
+  border-color: #0ea5e9;
+}
+
+.auth-card .primary-button,
+.auth-card .secondary-button {
+  width: 100%;
+  margin-top: 14px;
+}
+
 .hero-panel {
   display: grid;
   grid-template-columns: 1.6fr 0.9fr;
